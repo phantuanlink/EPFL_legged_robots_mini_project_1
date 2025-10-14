@@ -39,7 +39,7 @@ class FootForceProfile:
     def phase(self) -> float:
         """Get oscillator phase in [0, 2pi] range."""
         # TODO: return the phase of the oscillator in [0, 2pi] range
-        return self.theta % (2 * np.pi)
+        return self.theta % (2.0 * np.pi)
 
     def force(self) -> np.ndarray:
         """
@@ -57,9 +57,9 @@ class FootForceProfile:
     def impulse_duration(self) -> float:
         """Return impulse duration in seconds."""
         # TODO: compute the impulse duration in seconds
-        return 1/self.f0
+        return 1/(2 * self.f0)
 
     def idle_duration(self) -> float:
         """Return idle time between impulses in seconds"""
         # TODO: compute the idle duration in seconds
-        return 1/self.f1 - 1/self.f0
+        return 1.0 / (2.0 * self.f1)
