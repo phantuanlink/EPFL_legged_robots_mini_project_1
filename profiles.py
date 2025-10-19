@@ -4,7 +4,7 @@ import numpy as np
 class FootForceProfile:
     """Class to generate foot force profiles over time using a single CPG oscillator"""
 
-    def __init__(self, f0: float, f1: float, Fx: float, Fy: float, Fz: float):
+    def __init__(self, single_jump : bool, f0: float, f1: float, Fx: float, Fy: float, Fz: float):
         """
         Create instance of foot force profile with its arguments.
 
@@ -15,6 +15,7 @@ class FootForceProfile:
             Fy (float): Foot force amplitude in Y direction (N)
             Fz (float): Foot force amplitude in Z direction (N)
         """
+        self.single_jump = single_jump
         self.theta = 0
         self.f0 = f0
         self.f1 = f1
@@ -28,7 +29,7 @@ class FootForceProfile:
             dt (float): Timestep duration (s)
         """
         # TODO: integrate the oscillator equation
-        current_freq = self.f0 if self.phase() < np.pi else self.f1
+        current_freq = self.f1 if self.phase() < np.pi else self.f0
         self.theta += 2*np.pi*current_freq*dt
 
 
@@ -46,9 +47,10 @@ class FootForceProfile:
         """
         # TODO: return the force vector given the oscillator state
         force = np.zeros(3)
-        force[0] = self.F[0]
-        force[1] = self.F[1] * max(0, np.sin(self.phase()))
-        force[2] = self.F[2] * max(0, np.sin(self.phase()))
+        if not self.single_jump or self.theta < 2*np.pi:
+            force[0] = self.F[0] * min(0, np.sin(self.phase()))
+            force[1] = self.F[1] * min(0, np.sin(self.phase()))
+            force[2] = self.F[2] * min(0, np.sin(self.phase()))
         return force
 
     def impulse_duration(self) -> float:
