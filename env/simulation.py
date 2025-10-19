@@ -55,7 +55,8 @@ class QuadSimulator:
         self._time_s = 0.0
 
         # Recording video ID
-        self._video_log_id: Optional[int] = None
+        # self._video_log_id: Optional[int] = None
+        self._video_log_id = 0
 
         # Load model into pybullet
         self.reload_model()

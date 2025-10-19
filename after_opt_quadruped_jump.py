@@ -42,7 +42,8 @@ k_vmc': 943.8208111839183,
 
 class JumpMode(Enum):
     FORWARD = (-272.25032373170086, 2.477, -811.5666868704336)
-    SIDE = (-100.56688520, -32.5900604, -355.44503760)
+    #SIDE = (115.98627541250, -328.604212, -366.96045548)
+    SIDE = (61.577787614652465, -109.7633361305095, -269.82648409240016)
     TWIST = (64.41275590430618, -737.9591640525873, -1147.0883123971944)
 
     def force(self, scale: float = 1.0) -> np.ndarray:
@@ -54,12 +55,24 @@ class JumpMode(Enum):
         if self == JumpMode.FORWARD:
             return 1.824507
         elif self == JumpMode.SIDE:
-            return 1.565263
+            return 2.0106942249833435
         elif self == JumpMode.TWIST:
             return 3.744262
         else:
             return 1.0  # default value
     
+    def k_vmc(self) -> float:
+        """Return the k_vmc gain for this jump mode."""
+        if self == JumpMode.FORWARD:
+            return 1173.2834329945651
+        elif self == JumpMode.SIDE:
+            return 1633.201592784363
+        elif self == JumpMode.TWIST:
+            return 943.8208111839183
+        else:
+            return 800.0  # default value
+        
+
 jump_mode = JumpMode.TWIST
 
 class ControllerParameters:
@@ -77,7 +90,7 @@ class ControllerParameters:
         self.y_offset_nominal_pos = 0.1
         self.dt = 0.001
 
-        self.k_vmc = 943.8208111839183  # Virtual model control gain
+        self.k_vmc = jump_mode.k_vmc()  # Virtual model control gain
 
         # Per-leg integrator state (initialized to zeros)
         self.foot_error_integral = np.zeros((N_LEGS, 3), dtype=float)
@@ -109,6 +122,10 @@ class ControllerParameters:
     def set_time_step(self, dt:float):
         self.dt = dt
 
+    def set_gains(self, KpCartesian: float, KdCartesian: float):
+        self.KpCartesian = np.diag([KpCartesian, KpCartesian, KpCartesian])
+        self.KdCartesian = np.diag([KdCartesian, KdCartesian, KdCartesian])
+
 params_ = ControllerParameters()
 
 
@@ -118,7 +135,7 @@ def quadruped_jump():
     sim_options = SimulationOptions(
         on_rack=on_rack,  # Whether to suspend the robot in the air (helpful for debugging)
         render=True,  # Whether to use the GUI visualizer (slower than running in the background)
-        record_video=False,  # Whether to record a video to file (needs render=True)
+        record_video=True,  # Whether to record a video to file (needs render=True)
         tracking_camera=True,  # Whether the camera follows the robot (instead of free)
     )
     simulator = QuadSimulator(sim_options)
@@ -126,6 +143,8 @@ def quadruped_jump():
     params_.set_neutral_position(simulator)
     params_.reset_integrator()
     params_.set_time_step(sim_options.timestep)
+    if (jump_mode == JumpMode.SIDE):
+        params_.set_gains(KpCartesian=2081.7002807992953, KdCartesian=42.3563149834)
 
     Fx, Fy, Fz = jump_mode.force(scale=1.0)
     f0 = jump_mode.f0()
@@ -133,7 +152,7 @@ def quadruped_jump():
     force_profile = FootForceProfile(f0=f0, f1=0.3, Fx=Fx, Fy=Fy, Fz=Fz)
 
     # Determine number of jumps to simulate
-    n_jumps = 15  # Feel free to change this number
+    n_jumps = 5  # Feel free to change this number
     jump_duration = force_profile.impulse_duration() + force_profile.idle_duration()
     n_steps = int((n_jumps * jump_duration ) / sim_options.timestep)
     forces_history = np.zeros((n_steps, 3), dtype=float)

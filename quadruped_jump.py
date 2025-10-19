@@ -70,6 +70,13 @@ class ControllerParameters:
     def set_time_step(self, dt:float):
         self.dt = dt
 
+    def set_gains(self, KpCartesian: float, KdCartesian: float):
+        self.KpCartesian = np.diag([KpCartesian, KpCartesian, KpCartesian])
+        self.KdCartesian = np.diag([KdCartesian, KdCartesian, KdCartesian])
+
+    def get_desired_height(self):
+        return self.h_des
+
 params_ = ControllerParameters()
 
 

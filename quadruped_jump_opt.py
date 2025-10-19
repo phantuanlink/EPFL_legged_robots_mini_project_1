@@ -18,7 +18,7 @@ from quadruped_jump import (
 
 
 params_ = ControllerParameters()
-jumpmode_ = JumpMode.TWIST
+jumpmode_ = JumpMode.FORWARD
 N_LEGS = 4
 N_JOINTS = 3
 
@@ -93,11 +93,18 @@ def evaluate_jumping(trial: Trial, simulator: QuadSimulator) -> float:
         Fy = trial.suggest_float("Fy", low=-600, high=0.0)  # negative Fy to jump to the positive Y direction
         Fz = trial.suggest_float("Fz", low=-1000, high=-200)
         f0 = trial.suggest_float("f0", low=1.4, high=4.5)
+
+        Kp = trial.suggest_float("KpCartesian", low=500, high=3000)
+        Kd = trial.suggest_float("KdCartesian", low=5, high=50)
+        params_.set_gains(KpCartesian=Kp, KdCartesian=Kd)
+
     elif (jumpmode_ == JumpMode.TWIST):
         Fx = trial.suggest_float("Fx", low=-100, high=100) # limited Fx to negative values to jump to the side
         Fy = trial.suggest_float("Fy", low=-1000, high=0.0)  # negative Fy to jump to the positive Y direction
         Fz = trial.suggest_float("Fz", low=-1200, high=-200)
         f0 = trial.suggest_float("f0", low=1.4, high=4.5)
+
+
 
     #f1 = trial.suggest_float("f1", low=0.01, high=0.5)
     f1 = 0.3  # keep f1 fixed so that robot have to remain stable after landing
@@ -143,8 +150,11 @@ def evaluate_jumping(trial: Trial, simulator: QuadSimulator) -> float:
         yaw_rate_ += (new_yaw - yaw) / sim_options.timestep
         yaw = new_yaw
         
-        if (jumpmode_ == JumpMode.TWIST and simulator.get_foot_contacts().all()):
-            objective_value -= np.linalg.norm(simulator.get_base_position() - initial_pos)  # Subtract for moving in xyz, we want purely twist jump
+        if simulator.get_foot_contacts().all():
+            if (jumpmode_ == JumpMode.TWIST):
+                objective_value -= np.linalg.norm(simulator.get_base_position() - initial_pos)  # Subtract for moving in xyz, we want purely twist jump
+            elif (jumpmode_ == JumpMode.SIDE):
+                objective_value -= 0.05 * np.abs(simulator.get_base_position()[1] - params_.get_desired_height())   # reset initial position after landing to measure only jump distance
 
         
 
@@ -152,7 +162,7 @@ def evaluate_jumping(trial: Trial, simulator: QuadSimulator) -> float:
     # Note: the objective function is maximized!
     if jumpmode_ == JumpMode.FORWARD:
         print(f"Furthest jump value: X={simulator.get_base_position()[0]}, Z={simulator.get_base_position()[2]}")
-        objective_value += np.abs(simulator.get_base_position()[0]) + 0.5 * np.abs(simulator.get_base_position()[2]) # maximize forward distance
+        objective_value += np.abs(simulator.get_base_position()[0]) + 0.25 * np.abs(simulator.get_base_position()[2]) # maximize forward distance
     elif jumpmode_ == JumpMode.SIDE:
         print(f"Furthest jump value: Y={simulator.get_base_position()[1]}, Z={simulator.get_base_position()[2]}")
         objective_value += np.abs(simulator.get_base_position()[1]) + 0.3 * np.abs(simulator.get_base_position()[2]) # maximize sideway distance
