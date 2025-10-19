@@ -30,9 +30,9 @@ class FootForceProfile:
             dt (float): Timestep duration (s)
         """
         if self.phase() < np.pi:
-            self.delta_theta  = 2 * np.pi * self.f0
-        else:
             self.delta_theta  = 2 * np.pi * self.f1
+        else:
+            self.delta_theta  = 2 * np.pi * self.f0
         self.theta += self.delta_theta * dt
         
 
@@ -49,8 +49,8 @@ class FootForceProfile:
             np.ndarray: An R^3 array [Fx, Fy, Fz]
         """
         # TODO: return the force vector given the oscillator state
-        if self.phase() < np.pi:
-            return self.F * np.sin(self.phase())
+        if np.sin(self.phase()) < 0:
+            return self.F * np.abs(np.sin(self.phase()))
         else:
             return np.zeros(3)
 

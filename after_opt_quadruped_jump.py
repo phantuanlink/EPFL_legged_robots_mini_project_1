@@ -11,9 +11,32 @@ on_rack = False  # Whether to suspend the robot in the air (helpful for debuggin
 global_time_step = 0
 vmc = True  # Whether to use virtual model control
 
+"""
+optimiazation results:
+
+Forward jump:
+Best params: {'k_vmc': 1173.2834329945651, 
+'Fx': -272.25032373170086,
+Fy': 2.477624562524529, 
+'Fz': -811.5666868704336, 
+'f0': 1.8245074761316986
+
+Side jump:
+Best params: {
+'k_vmc': 659.7384521878236, 
+'Fx': -104.22346281467921, 
+'Fy': -34.26111715521937, 
+'Fz': -286.9870829959109, 
+'f0': 1.6629365090937225
+}
+
+Twist jump:
+
+}
+"""
 
 class JumpMode(Enum):
-    FORWARD = (-500.0, 0.0, -800.0)
+    FORWARD = (-272.25032373170086, 2.477, -811.5666868704336)
     SIDE = (100.0, 80.0, -400.0)
     TWIST = (0.0, 150.0, -300.0)
 
@@ -38,7 +61,7 @@ class ControllerParameters:
         self.y_offset_nominal_pos = 0.1
         self.dt = 0.001
 
-        self.k_vmc = 800.0  # Virtual model control gain
+        self.k_vmc = 1173.2834329945651  # Virtual model control gain
 
         # Per-leg integrator state (initialized to zeros)
         self.foot_error_integral = np.zeros((N_LEGS, 3), dtype=float)
@@ -90,10 +113,10 @@ def quadruped_jump():
 
     Fx, Fy, Fz = jump_mode.force(scale=1.0)
     print(f"Using jump mode {jump_mode.name} with forces Fx={Fx}, Fy={Fy}, Fz={Fz}")
-    force_profile = FootForceProfile(f0=3.0, f1=0.2, Fx=Fx, Fy=Fy, Fz=Fz)
+    force_profile = FootForceProfile(f0=1.82450, f1=0.3, Fx=Fx, Fy=Fy, Fz=Fz)
 
     # Determine number of jumps to simulate
-    n_jumps = 3  # Feel free to change this number
+    n_jumps = 15  # Feel free to change this number
     jump_duration = force_profile.impulse_duration() + force_profile.idle_duration()
     n_steps = int((n_jumps * jump_duration ) / sim_options.timestep)
     forces_history = np.zeros((n_steps, 3), dtype=float)
@@ -255,7 +278,6 @@ def gravity_compensation(
 def apply_force_profile(
     simulator: QuadSimulator,
     force_profile: FootForceProfile,
-    jump_mode: JumpMode = JumpMode.FORWARD,
     # OPTIONAL: add potential controller parameters here (e.g., gains)
 ) -> np.ndarray:
     # All motor torques are in a single array
