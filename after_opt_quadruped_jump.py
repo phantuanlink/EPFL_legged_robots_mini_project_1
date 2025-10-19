@@ -23,28 +23,44 @@ Fy': 2.477624562524529,
 
 Side jump:
 Best params: {
-'k_vmc': 659.7384521878236, 
-'Fx': -104.22346281467921, 
-'Fy': -34.26111715521937, 
-'Fz': -286.9870829959109, 
-'f0': 1.6629365090937225
+'k_vmc': 795.7053405, 
+'Fx': -100.56688520, 
+'Fy': -32.5900604, 
+'Fz': -355.44503760, 
+'f0': 1.565263
 }
 
 Twist jump:
+k_vmc': 943.8208111839183, 
+'Fx': 64.41275590430618, 
+'Fy': -737.9591640525873, 
+'Fz': -1147.0883123971944, 
+'f0': 3.7442627484118094
 
 }
 """
 
 class JumpMode(Enum):
     FORWARD = (-272.25032373170086, 2.477, -811.5666868704336)
-    SIDE = (100.0, 80.0, -400.0)
-    TWIST = (0.0, 150.0, -300.0)
+    SIDE = (-100.56688520, -32.5900604, -355.44503760)
+    TWIST = (64.41275590430618, -737.9591640525873, -1147.0883123971944)
 
     def force(self, scale: float = 1.0) -> np.ndarray:
         """Return the Fx,Fy,Fz as a numpy array optionally scaled."""
         return np.array(self.value, dtype=float) * float(scale)
     
-jump_mode = JumpMode.FORWARD
+    def f0(self) -> float:
+        """Return the f0 frequency for this jump mode."""
+        if self == JumpMode.FORWARD:
+            return 1.824507
+        elif self == JumpMode.SIDE:
+            return 1.565263
+        elif self == JumpMode.TWIST:
+            return 3.744262
+        else:
+            return 1.0  # default value
+    
+jump_mode = JumpMode.TWIST
 
 class ControllerParameters:
     def __init__(self):
@@ -56,12 +72,12 @@ class ControllerParameters:
         self.KiCartesian = np.diag([0.0, 800.0, 800.0])
         self.KdCartesian = np.diag([30.0, 30.0, 30.0])
 
-        self.h_des = 0.25                                       #### Robot height
+        self.h_des = 0.25  ####  Robot height
         self.x_offset_nominal_pos = -0.05
         self.y_offset_nominal_pos = 0.1
         self.dt = 0.001
 
-        self.k_vmc = 1173.2834329945651  # Virtual model control gain
+        self.k_vmc = 943.8208111839183  # Virtual model control gain
 
         # Per-leg integrator state (initialized to zeros)
         self.foot_error_integral = np.zeros((N_LEGS, 3), dtype=float)
@@ -112,8 +128,9 @@ def quadruped_jump():
     params_.set_time_step(sim_options.timestep)
 
     Fx, Fy, Fz = jump_mode.force(scale=1.0)
+    f0 = jump_mode.f0()
     print(f"Using jump mode {jump_mode.name} with forces Fx={Fx}, Fy={Fy}, Fz={Fz}")
-    force_profile = FootForceProfile(f0=1.82450, f1=0.3, Fx=Fx, Fy=Fy, Fz=Fz)
+    force_profile = FootForceProfile(f0=f0, f1=0.3, Fx=Fx, Fy=Fy, Fz=Fz)
 
     # Determine number of jumps to simulate
     n_jumps = 15  # Feel free to change this number
