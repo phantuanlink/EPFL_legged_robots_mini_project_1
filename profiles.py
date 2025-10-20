@@ -4,7 +4,7 @@ import numpy as np
 class FootForceProfile:
     """Class to generate foot force profiles over time using a single CPG oscillator"""
 
-    def __init__(self, single_jump : bool, f0: float, f1: float, Fx: float, Fy: float, Fz: float):
+    def __init__(self, f0: float, f1: float, Fx: float, Fy: float, Fz: float):
         """
         Create instance of foot force profile with its arguments.
 
@@ -15,11 +15,12 @@ class FootForceProfile:
             Fy (float): Foot force amplitude in Y direction (N)
             Fz (float): Foot force amplitude in Z direction (N)
         """
-        self.single_jump = single_jump
         self.theta = 0
         self.f0 = f0
         self.f1 = f1
         self.F = np.array([Fx, Fy, Fz])
+
+        self.delta_theta = 0
 
     def step(self, dt: float):
         """
@@ -28,15 +29,17 @@ class FootForceProfile:
         Args:
             dt (float): Timestep duration (s)
         """
-        # TODO: integrate the oscillator equation
-        current_freq = self.f1 if self.phase() < np.pi else self.f0
-        self.theta += 2*np.pi*current_freq*dt
-
+        if self.phase() < np.pi:
+            self.delta_theta  = 2 * np.pi * self.f1
+        else:
+            self.delta_theta  = 2 * np.pi * self.f0
+        self.theta += self.delta_theta * dt
+        
 
     def phase(self) -> float:
         """Get oscillator phase in [0, 2pi] range."""
         # TODO: return the phase of the oscillator in [0, 2pi] range
-        return self.theta % (2 * np.pi)
+        return self.theta % (2.0 * np.pi)
 
     def force(self) -> np.ndarray:
         """
@@ -46,19 +49,17 @@ class FootForceProfile:
             np.ndarray: An R^3 array [Fx, Fy, Fz]
         """
         # TODO: return the force vector given the oscillator state
-        force = np.zeros(3)
-        if not self.single_jump or self.theta < 2*np.pi:
-            force[0] = self.F[0] * min(0, np.sin(self.phase()))
-            force[1] = self.F[1] * min(0, np.sin(self.phase()))
-            force[2] = self.F[2] * min(0, np.sin(self.phase()))
-        return force
+        if np.sin(self.phase()) < 0:
+            return self.F * np.abs(np.sin(self.phase()))
+        else:
+            return np.zeros(3)
 
     def impulse_duration(self) -> float:
         """Return impulse duration in seconds."""
         # TODO: compute the impulse duration in seconds
-        return 1/self.f0
+        return 1/(2 * self.f0)
 
     def idle_duration(self) -> float:
         """Return idle time between impulses in seconds"""
         # TODO: compute the idle duration in seconds
-        return 1/self.f1
+        return 1.0 / (2.0 * self.f1)

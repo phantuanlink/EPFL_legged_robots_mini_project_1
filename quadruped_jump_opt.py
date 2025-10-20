@@ -11,9 +11,14 @@ from quadruped_jump import (
     gravity_compensation,
     apply_force_profile,
     virtual_model,
+    ControllerParameters,
+    JumpMode
 )
 
 
+
+params_ = ControllerParameters()
+jumpmode_ = JumpMode.FORWARD
 N_LEGS = 4
 N_JOINTS = 3
 
@@ -28,6 +33,10 @@ def quadruped_jump_optimization():
         tracking_camera=True,  # Whether the camera follows the robot (instead of free)
     )
     simulator = QuadSimulator(sim_options)
+    print("Hip offsets:", simulator.get_hip_offsets())
+    params_.set_neutral_position(simulator)
+    params_.reset_integrator()
+    params_.set_time_step(sim_options.timestep)
 
     # Create a maximization problem
     objective = partial(evaluate_jumping, simulator=simulator)
@@ -40,7 +49,7 @@ def quadruped_jump_optimization():
 
     # Run the optimization
     # You can change the number of trials here
-    study.optimize(objective, n_trials=20)
+    study.optimize(objective, n_trials=50)
 
     # Close the simulation
     simulator.close()
@@ -62,7 +71,7 @@ def evaluate_jumping(trial: Trial, simulator: QuadSimulator) -> float:
     # TODO: pick optimization variables
     # The following function creates an optimization variable with given name and lower and upper bounds
     # You can then plug in the value in your controller
-    variable1 = trial.suggest_float(name="variable1", low=0.0, high=1.0)
+    k_vmc = trial.suggest_float(name="k_vmc", low=500, high=2000)
 
     # Reset the simulation
     simulator.reset()
@@ -71,12 +80,47 @@ def evaluate_jumping(trial: Trial, simulator: QuadSimulator) -> float:
     sim_options = simulator.options
 
     # Determine number of jumps to simulate
-    n_jumps = 1  # Feel free to change this number
-    jump_duration = 5.0  # TODO: determine how long a jump takes
-    n_steps = int(n_jumps * jump_duration / sim_options.timestep)
+    n_jumps = 2  # Feel free to change this number
 
     # TODO: set parameters for the foot force profile here
-    force_profile = FootForceProfile(f0=0, f1=0, Fx=0, Fy=0, Fz=0)
+    if (jumpmode_ == JumpMode.FORWARD):
+        Fx = trial.suggest_float("Fx", low=-1000, high=-200)
+        Fy = trial.suggest_float("Fy", low=-20, high=20.0)
+        Fz = trial.suggest_float("Fz", low=-1000, high=-200)
+        f0 = trial.suggest_float("f0", low=1.4, high=4.5)
+    elif (jumpmode_ == JumpMode.SIDE):
+        Fx = trial.suggest_float("Fx", low=-200, high=200) # limited Fx to negative values to jump to the side
+        Fy = trial.suggest_float("Fy", low=-600, high=0.0)  # negative Fy to jump to the positive Y direction
+        Fz = trial.suggest_float("Fz", low=-1000, high=-200)
+        f0 = trial.suggest_float("f0", low=1.4, high=4.5)
+
+        Kp = trial.suggest_float("KpCartesian", low=500, high=3000)
+        Kd = trial.suggest_float("KdCartesian", low=5, high=50)
+        params_.set_gains(KpCartesian=Kp, KdCartesian=Kd)
+
+    elif (jumpmode_ == JumpMode.TWIST):
+        Fx = trial.suggest_float("Fx", low=-100, high=100) # limited Fx to negative values to jump to the side
+        Fy = trial.suggest_float("Fy", low=-1000, high=0.0)  # negative Fy to jump to the positive Y direction
+        Fz = trial.suggest_float("Fz", low=-1200, high=-200)
+        f0 = trial.suggest_float("f0", low=1.4, high=4.5)
+
+
+
+    #f1 = trial.suggest_float("f1", low=0.01, high=0.5)
+    f1 = 0.3  # keep f1 fixed so that robot have to remain stable after landing
+
+    force_profile = FootForceProfile(f0=f0, f1=f1, Fx=Fx, Fy=Fy, Fz=Fz)
+    jump_duration = force_profile.impulse_duration() + force_profile.idle_duration()
+    n_steps = int((n_jumps * jump_duration + + force_profile.idle_duration()) / sim_options.timestep)
+
+    accumulated_roll = 0.0
+    accumulated_pitch = 0.0
+    yaw_rate_ = 0.0
+    _, _, yaw = simulator.get_base_orientation_roll_pitch_yaw()
+    initial_pos = simulator.get_base_position().copy()
+
+    objective_value = 0.0
+
 
     for _ in range(n_steps):
         # Step the oscillator
@@ -85,22 +129,52 @@ def evaluate_jumping(trial: Trial, simulator: QuadSimulator) -> float:
         # Compute torques as motor targets (reuses your controller functions)
         # OPTIONAL: add potential extra controller parameters here
         tau = np.zeros(N_JOINTS * N_LEGS)
-        tau += nominal_position(simulator)
-        tau += apply_force_profile(simulator, force_profile)
+        tau += nominal_position(simulator, params = params_)
+        tau += apply_force_profile(simulator, force_profile, jump_mode=jumpmode_)
         tau += gravity_compensation(simulator)
 
         # If touching the ground, add virtual model
-        on_ground = True  # TODO: how do we know we're on the ground?
+        on_ground = simulator.get_foot_contacts().all()
         if on_ground:
-            tau += virtual_model(simulator)
+            tau += virtual_model(simulator, k_vmc)
 
         # Set the motor commands and step the simulation
         simulator.set_motor_targets(tau)
         simulator.step()
 
+        roll_, pitch_, _ = simulator.get_base_orientation_roll_pitch_yaw()
+        accumulated_roll += np.abs(roll_)
+        accumulated_pitch += np.abs(pitch_)
+
+        new_yaw = simulator.get_base_orientation_roll_pitch_yaw()[2]
+        yaw_rate_ += (new_yaw - yaw) / sim_options.timestep
+        yaw = new_yaw
+        
+        if simulator.get_foot_contacts().all():
+            if (jumpmode_ == JumpMode.TWIST):
+                objective_value -= np.linalg.norm(simulator.get_base_position() - initial_pos)  # Subtract for moving in xyz, we want purely twist jump
+            elif (jumpmode_ == JumpMode.SIDE):
+                objective_value -= 0.05 * np.abs(simulator.get_base_position()[1] - params_.get_desired_height())   # reset initial position after landing to measure only jump distance
+
+        
+
     # TODO: implement an objective function and return its value
     # Note: the objective function is maximized!
-    return 0
+    if jumpmode_ == JumpMode.FORWARD:
+        print(f"Furthest jump value: X={simulator.get_base_position()[0]}, Z={simulator.get_base_position()[2]}")
+        objective_value += np.abs(simulator.get_base_position()[0]) + 0.25 * np.abs(simulator.get_base_position()[2]) # maximize forward distance
+    elif jumpmode_ == JumpMode.SIDE:
+        print(f"Furthest jump value: Y={simulator.get_base_position()[1]}, Z={simulator.get_base_position()[2]}")
+        objective_value += np.abs(simulator.get_base_position()[1]) + 0.3 * np.abs(simulator.get_base_position()[2]) # maximize sideway distance
+        objective_value -= np.abs(simulator.get_base_position()[0]) # penalize for forward movement
+    elif jumpmode_ == JumpMode.TWIST:
+        objective_value += 0.3 * np.abs(simulator.get_base_position()[2]) # Rewards for height
+        objective_value += 0.05 * yaw_rate_         # Rewards for yaw rate, twist fast
+ 
+    # penalize for roll and pitch over accumulated over the jump
+    objective_value -= (accumulated_roll + accumulated_pitch) * 0.05
+
+    return objective_value
 
 
 if __name__ == "__main__":

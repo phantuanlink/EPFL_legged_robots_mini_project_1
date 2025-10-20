@@ -55,7 +55,8 @@ class QuadSimulator:
         self._time_s = 0.0
 
         # Recording video ID
-        self._video_log_id: Optional[int] = None
+        # self._video_log_id: Optional[int] = None
+        self._video_log_id = 0
 
         # Load model into pybullet
         self.reload_model()
@@ -349,6 +350,9 @@ class QuadSimulator:
         hip_world = com_pos + R @ hip_offset
         foot_world = hip_world + R @ foot_pos
         return foot_world
+    
+    def get_hip_offsets(self) -> np.ndarray:
+        return self._hip_offsets
 
     def get_foot_contacts(self) -> np.ndarray:
         """Get a boolean array to check whether each foot is touching the ground.
