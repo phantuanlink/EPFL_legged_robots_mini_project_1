@@ -13,7 +13,7 @@ vmc = True  # Whether to use virtual model control
 
 
 class JumpMode(Enum):
-    FORWARD = (-500.0, 0.0, -800.0)
+    FORWARD = (-300.0, 0.0, -600.0)
     SIDE = (100.0, 80.0, -400.0)
     TWIST = (0.0, 150.0, -300.0)
 
@@ -29,16 +29,16 @@ class ControllerParameters:
         self.KdJoint = np.diag([0.5, 0.5, 0.5])
     
         ##### Cartesian impedance gains
-        self.KpCartesian = np.diag([1000.0, 1000.0, 1000.0]) * 2
+        self.KpCartesian = np.diag([1000.0, 1000.0, 1000.0])
         self.KiCartesian = np.diag([0.0, 800.0, 800.0])
         self.KdCartesian = np.diag([30.0, 30.0, 30.0])
 
-        self.h_des = 0.25                                       #### Robot height
+        self.h_des = 0.22                                       #### Robot height
         self.x_offset_nominal_pos = -0.05
         self.y_offset_nominal_pos = 0.1
         self.dt = 0.001
 
-        self.k_vmc = 800.0  # Virtual model control gain
+        self.k_vmc = 1000.0  # Virtual model control gain
 
         # Per-leg integrator state (initialized to zeros)
         self.foot_error_integral = np.zeros((N_LEGS, 3), dtype=float)
@@ -55,12 +55,6 @@ class ControllerParameters:
         self.foots_neutral[3, 1] = self.y_offset_nominal_pos
 
         self.foots_neutral[:, 0] = 0
-
-        # self.foots_neutral[0, 0] = 0
-        # self.foots_neutral[1, 0] = 0
-        # self.foots_neutral[2, 0] = self.x_offset_nominal_pos
-        # self.foots_neutral[3, 0] = self.x_offset_nominal_pos
-
 
         print("Neutral foot positions:", self.foots_neutral)
 
@@ -251,7 +245,7 @@ def gravity_compensation(
     for leg_id in range(N_LEGS):
         gravity_compensation = -np.array([0, 0, 9.81 * simulator.get_mass() / N_LEGS])
         J, _ = simulator.get_jacobian_and_position(leg_id)
-        gravity_compensation += J.T @ gravity_compensation
+        gravity_compensation = J.T @ gravity_compensation
 
         # Store in torques array
         tau[leg_id * N_JOINTS : leg_id * N_JOINTS + N_JOINTS] = gravity_compensation

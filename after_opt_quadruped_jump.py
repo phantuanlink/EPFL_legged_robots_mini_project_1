@@ -37,14 +37,19 @@ k_vmc': 943.8208111839183,
 'Fz': -1147.0883123971944, 
 'f0': 3.7442627484118094
 
+
+test:
+Best params: {'k_vmc': 777.2816832882905, 'Fx': -239.53998390607399, 'Fy': 11.005312934444582, 'Fz': -278.65137596655404, 'f0': 4.173964786325712, 'KpCartesian': 1994.7499470277128, 'KdCartesian': 46.48434057604026}
+
+
 }
 """
 
 class JumpMode(Enum):
-    FORWARD = (-272.25032373170086, 2.477, -811.5666868704336)
+    FORWARD = (-275, -3.3, -678.)
     #SIDE = (115.98627541250, -328.604212, -366.96045548)
-    SIDE = (61.577787614652465, -109.7633361305095, -269.82648409240016)
-    TWIST = (64.41275590430618, -737.9591640525873, -1147.0883123971944)
+    SIDE = (-65., -147.7633361305095, -581.82648409240016)
+    TWIST = (12.41275590430618, -274.9591640525873, -856.0883123971944)
 
     def force(self, scale: float = 1.0) -> np.ndarray:
         """Return the Fx,Fy,Fz as a numpy array optionally scaled."""
@@ -53,24 +58,33 @@ class JumpMode(Enum):
     def f0(self) -> float:
         """Return the f0 frequency for this jump mode."""
         if self == JumpMode.FORWARD:
-            return 1.824507
+            return 1.7116
         elif self == JumpMode.SIDE:
-            return 2.0106942249833435
+            return 1.512
         elif self == JumpMode.TWIST:
-            return 3.744262
+            return 3.5
         else:
             return 1.0  # default value
     
     def k_vmc(self) -> float:
         """Return the k_vmc gain for this jump mode."""
         if self == JumpMode.FORWARD:
-            return 1173.2834329945651
+            return 1498.1123368877925
         elif self == JumpMode.SIDE:
-            return 1633.201592784363
+            return 1308.201592784363
         elif self == JumpMode.TWIST:
-            return 943.8208111839183
+            return 585.9590902232519
         else:
             return 800.0  # default value
+        
+    def PD_gains(self) -> tuple[float, float]:
+        if self == JumpMode.FORWARD:
+            return (688.1159, 49.2836208)
+        elif self == JumpMode.SIDE:
+            return (2728, 49.2836208)
+        elif self == JumpMode.TWIST:
+            return (2769, 41)
+        
         
 
 jump_mode = JumpMode.TWIST
@@ -85,7 +99,9 @@ class ControllerParameters:
         self.KiCartesian = np.diag([0.0, 800.0, 800.0])
         self.KdCartesian = np.diag([30.0, 30.0, 30.0])
 
-        self.h_des = 0.25  ####  Robot height
+        self.set_gains(jump_mode.PD_gains()[0], jump_mode.PD_gains()[1] )
+
+        self.h_des = 0.22  ####  Robot height
         self.x_offset_nominal_pos = -0.05
         self.y_offset_nominal_pos = 0.1
         self.dt = 0.001
@@ -303,7 +319,7 @@ def gravity_compensation(
     for leg_id in range(N_LEGS):
         gravity_compensation = -np.array([0, 0, 9.81 * simulator.get_mass() / N_LEGS])
         J, _ = simulator.get_jacobian_and_position(leg_id)
-        gravity_compensation += J.T @ gravity_compensation
+        gravity_compensation = J.T @ gravity_compensation
 
         # Store in torques array
         tau[leg_id * N_JOINTS : leg_id * N_JOINTS + N_JOINTS] = gravity_compensation

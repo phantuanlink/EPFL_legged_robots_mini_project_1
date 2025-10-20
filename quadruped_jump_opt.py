@@ -18,7 +18,7 @@ from quadruped_jump import (
 
 
 params_ = ControllerParameters()
-jumpmode_ = JumpMode.FORWARD
+jumpmode_ = JumpMode.TWIST
 N_LEGS = 4
 N_JOINTS = 3
 
@@ -38,9 +38,13 @@ def quadruped_jump_optimization():
     params_.reset_integrator()
     params_.set_time_step(sim_options.timestep)
 
+
+    seed = int(np.random.randint(0, 2**31 - 1))
+    print("Optuna sampler seed =", seed)
+
     # Create a maximization problem
     objective = partial(evaluate_jumping, simulator=simulator)
-    sampler = optuna.samplers.TPESampler(seed=42)
+    sampler = optuna.samplers.TPESampler(seed=seed)
     study = optuna.create_study(
         study_name="Quadruped Jumping Optimization",
         sampler=sampler,
@@ -86,17 +90,13 @@ def evaluate_jumping(trial: Trial, simulator: QuadSimulator) -> float:
     if (jumpmode_ == JumpMode.FORWARD):
         Fx = trial.suggest_float("Fx", low=-1000, high=-200)
         Fy = trial.suggest_float("Fy", low=-20, high=20.0)
-        Fz = trial.suggest_float("Fz", low=-1000, high=-200)
+        Fz = trial.suggest_float("Fz", low=-1000, high=-400)
         f0 = trial.suggest_float("f0", low=1.4, high=4.5)
     elif (jumpmode_ == JumpMode.SIDE):
         Fx = trial.suggest_float("Fx", low=-200, high=200) # limited Fx to negative values to jump to the side
         Fy = trial.suggest_float("Fy", low=-600, high=0.0)  # negative Fy to jump to the positive Y direction
         Fz = trial.suggest_float("Fz", low=-1000, high=-200)
         f0 = trial.suggest_float("f0", low=1.4, high=4.5)
-
-        Kp = trial.suggest_float("KpCartesian", low=500, high=3000)
-        Kd = trial.suggest_float("KdCartesian", low=5, high=50)
-        params_.set_gains(KpCartesian=Kp, KdCartesian=Kd)
 
     elif (jumpmode_ == JumpMode.TWIST):
         Fx = trial.suggest_float("Fx", low=-100, high=100) # limited Fx to negative values to jump to the side
@@ -105,6 +105,9 @@ def evaluate_jumping(trial: Trial, simulator: QuadSimulator) -> float:
         f0 = trial.suggest_float("f0", low=1.4, high=4.5)
 
 
+    Kp = trial.suggest_float("KpCartesian", low=500, high=3000)
+    Kd = trial.suggest_float("KdCartesian", low=5, high=50)
+    params_.set_gains(KpCartesian=Kp, KdCartesian=Kd)
 
     #f1 = trial.suggest_float("f1", low=0.01, high=0.5)
     f1 = 0.3  # keep f1 fixed so that robot have to remain stable after landing
