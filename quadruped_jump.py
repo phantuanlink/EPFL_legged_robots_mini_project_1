@@ -13,14 +13,42 @@ vmc = True  # Whether to use virtual model control
 
 
 class JumpMode(Enum):
-    FORWARD = (-500.0, 0.0, -800.0)
-    SIDE = (100.0, 80.0, -400.0)
-    TWIST = (0.0, 150.0, -300.0)
+    FORWARD = (289.2436375411545, 0, 497.6249482354618)
+    FORWARD_CONT = (162.51277088135544, 0, 275.3893036724486)
+    SIDE = (0, 125.97643080731217, 212.59549105567112)
+    TWIST = (0, 276.3658482849424, 355.09101357785164)
 
     def force(self, scale: float = 1.0) -> np.ndarray:
         """Return the Fx,Fy,Fz as a numpy array optionally scaled."""
         return np.array(self.value, dtype=float) * float(scale)
     
+    def f0(self) -> float:
+        """Return the f0 frequency for this jump mode."""
+        if self == JumpMode.FORWARD:
+            return 4.3868949974162135
+        if self == JumpMode.FORWARD_CONT:
+            return 3.297475254953159
+        elif self == JumpMode.SIDE:
+            return 1.6180011227259672
+        elif self == JumpMode.TWIST:
+            return 2.3664190449445073
+        else:
+            return 1.0  # default value
+    
+    def k_vmc(self) -> float:
+        """Return the k_vmc gain for this jump mode."""
+        if self == JumpMode.FORWARD:
+            return 500.3490569152211
+        if self == JumpMode.FORWARD_CONT:
+            return 522.7602492954396
+        elif self == JumpMode.SIDE:
+            return 1285.5191968265854
+        elif self == JumpMode.TWIST:
+            return 1885.3182404517531
+        else:
+            return 800.0  # default value
+        
+
 jump_mode = JumpMode.SIDE
 
 class ControllerParameters:
@@ -33,12 +61,12 @@ class ControllerParameters:
         self.KiCartesian = np.diag([0.0, 800.0, 800.0])
         self.KdCartesian = np.diag([30.0, 30.0, 30.0])
 
-        self.h_des = 0.2                                       #### Robot height
+        self.h_des = 0.2  ####  Robot height
         self.x_offset_nominal_pos = -0.05
         self.y_offset_nominal_pos = 0.1
         self.dt = 0.001
 
-        self.k_vmc = 800.0  # Virtual model control gain
+        self.k_vmc = jump_mode.k_vmc()  # Virtual model control gain
 
         # Per-leg integrator state (initialized to zeros)
         self.foot_error_integral = np.zeros((N_LEGS, 3), dtype=float)
@@ -74,9 +102,6 @@ class ControllerParameters:
         self.KpCartesian = np.diag([KpCartesian, KpCartesian, KpCartesian])
         self.KdCartesian = np.diag([KdCartesian, KdCartesian, KdCartesian])
 
-    def get_desired_height(self):
-        return self.h_des
-
 params_ = ControllerParameters()
 
 
@@ -86,7 +111,7 @@ def quadruped_jump():
     sim_options = SimulationOptions(
         on_rack=on_rack,  # Whether to suspend the robot in the air (helpful for debugging)
         render=True,  # Whether to use the GUI visualizer (slower than running in the background)
-        record_video=False,  # Whether to record a video to file (needs render=True)
+        record_video=True,  # Whether to record a video to file (needs render=True)
         tracking_camera=True,  # Whether the camera follows the robot (instead of free)
     )
     simulator = QuadSimulator(sim_options)
@@ -96,11 +121,15 @@ def quadruped_jump():
     params_.set_time_step(sim_options.timestep)
 
     Fx, Fy, Fz = jump_mode.force(scale=1.0)
+    f0 = jump_mode.f0()
     print(f"Using jump mode {jump_mode.name} with forces Fx={Fx}, Fy={Fy}, Fz={Fz}")
-    force_profile = FootForceProfile(f0=3.0, f1=0.2, Fx=Fx, Fy=Fy, Fz=Fz)
+    if jump_mode == JumpMode.FORWARD_CONT:
+        force_profile = FootForceProfile(single_jump=False, f0=f0, f1=0.5610047144802118, Fx=Fx, Fy=Fy, Fz=Fz) # uncomment for continuous forwards jumping
+    else:
+        force_profile = FootForceProfile(single_jump=False, f0=f0, f1=0.2, Fx=Fx, Fy=Fy, Fz=Fz)
 
     # Determine number of jumps to simulate
-    n_jumps = 3  # Feel free to change this number
+    n_jumps = 10  # Feel free to change this number
     jump_duration = force_profile.impulse_duration() + force_profile.idle_duration()
     n_steps = int((n_jumps * jump_duration ) / sim_options.timestep)
     forces_history = np.zeros((n_steps, 3), dtype=float)
@@ -146,6 +175,9 @@ def quadruped_jump():
         simulator.step()
         global_time_step += 1
 
+    print(simulator.get_base_position())
+    print(simulator.get_base_position()/(n_steps * sim_options.timestep))
+    print(simulator.get_base_orientation_roll_pitch_yaw()[2]*180/np.pi)
     # Close the simulation
     simulator.close()
 
@@ -262,7 +294,6 @@ def gravity_compensation(
 def apply_force_profile(
     simulator: QuadSimulator,
     force_profile: FootForceProfile,
-    jump_mode: JumpMode = JumpMode.FORWARD,
     # OPTIONAL: add potential controller parameters here (e.g., gains)
 ) -> np.ndarray:
     # All motor torques are in a single array
@@ -274,10 +305,6 @@ def apply_force_profile(
         F_inst = force_profile.force()
         if (jump_mode == JumpMode.TWIST) and (leg_id>=2):
             F_inst[1] *= -1  # flip y-force for rear legs in twist mode
-        elif (jump_mode == JumpMode.SIDE):
-            if (F_inst[1] < 0 and leg_id % 2 == 0) or (F_inst[1] > 0 and leg_id % 2 == 1):
-                # F_inst[1] *= 1.5  # flip y-force for left legs in side jump
-                F_inst[1] *= 1.0  # flip y-force for left legs in side jump
 
         # if ((jump_mode == JumpMode.FORWARD or jump_mode == JumpMode.SIDE)) and leg_id < 2:
         #     scale[leg_id] = 1.0 # reduce front leg force in forward jump
