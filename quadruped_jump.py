@@ -21,7 +21,7 @@ class JumpMode(Enum):
         """Return the Fx,Fy,Fz as a numpy array optionally scaled."""
         return np.array(self.value, dtype=float) * float(scale)
     
-jump_mode = JumpMode.FORWARD
+jump_mode = JumpMode.SIDE
 
 class ControllerParameters:
     def __init__(self):
@@ -33,7 +33,7 @@ class ControllerParameters:
         self.KiCartesian = np.diag([0.0, 800.0, 800.0])
         self.KdCartesian = np.diag([30.0, 30.0, 30.0])
 
-        self.h_des = 0.25                                       #### Robot height
+        self.h_des = 0.2                                       #### Robot height
         self.x_offset_nominal_pos = -0.05
         self.y_offset_nominal_pos = 0.1
         self.dt = 0.001
@@ -251,7 +251,7 @@ def gravity_compensation(
     for leg_id in range(N_LEGS):
         gravity_compensation = -np.array([0, 0, 9.81 * simulator.get_mass() / N_LEGS])
         J, _ = simulator.get_jacobian_and_position(leg_id)
-        gravity_compensation += J.T @ gravity_compensation
+        gravity_compensation = J.T @ gravity_compensation
 
         # Store in torques array
         tau[leg_id * N_JOINTS : leg_id * N_JOINTS + N_JOINTS] = gravity_compensation
